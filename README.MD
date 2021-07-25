@@ -2,6 +2,9 @@
 
 ## Setup guide
 
+### Log-based CDC with Debezium source connector and JdbcSink connector
+
+
 ### Start infrastructure
 
 Go to the `src/main/resources/docker` folder and from there start all docker containers using the following command:
@@ -324,3 +327,139 @@ You should get the following response:
 ```
 
 ### Check the destination database and enjoy!
+
+## Polling-based CDC with JdbcSource connector and JdbcSink connector
+
+Let's say that you're starting from scratch and you've already executed the `docker-compose up` command.
+The next step would be to deploy the JdbcSink connector (which is polling-based, as opposed to Debezium connector).
+Execute the following HTTP request to deploy the JdbcSink connector:
+
+```bash
+$ curl -XPOST -H"Content-type: application/json" -d'
+{
+  "name": "jdbc-source",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "timestamp.column.name": "updated_at",
+    "connection.password": "postgres",
+    "transforms.InsertTopic.type": "org.apache.kafka.connect.transforms.InsertField$Value",
+    "transforms": "addTopicSuffix,InsertTopic,InsertSourceDetails,copyFieldToKey,extractValuefromStruct,MaskField",
+    "transforms.MaskField.type": "org.apache.kafka.connect.transforms.MaskField$Value",
+    "transforms.MaskField.fields": "password",
+    "transforms.MaskField.replacement": "********",
+    "transforms.extractValuefromStruct.type": "org.apache.kafka.connect.transforms.ExtractField$Key",
+    "transforms.addTopicSuffix.replacement": "$1",
+    "transforms.addTopicSuffix.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.addTopicSuffix.regex": "(.*)",
+    "transforms.InsertTopic.topic.field": "messagetopic",
+    "table.whitelist": "investments,investment_records,users,user_roles,foo",
+    "mode": "timestamp",
+    "topic.prefix": "cpt_",
+    "transforms.copyFieldToKey.type": "org.apache.kafka.connect.transforms.ValueToKey",
+    "dialect.name": "PostgreSqlDatabaseDialect",
+    "poll.inverval.ms": "1000",
+    "transforms.copyFieldToKey.fields": "id",
+    "validate.non.null": "false",
+    "transforms.InsertSourceDetails.static.field": "messagesource",
+    "transforms.InsertSourceDetails.type": "org.apache.kafka.connect.transforms.InsertField$Value",
+    "connection.user": "postgres",
+    "name": "jdbc-source",
+    "numeric.mapping": "best_fit",
+    "transforms.extractValuefromStruct.field": "id",
+    "connection.url": "jdbc:postgresql://cpt-operational-db:5432/crypto-profit-tracker",
+    "transforms.InsertSourceDetails.static.value": "JDBC Source Connector cpt db",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter"
+  }
+}'\
+ http://localhost:8083/connectors/ | jq
+ 
+```
+
+Check the deployed connector status:
+
+```bash
+$ curl http://localhost:8083/connectors/jdbc-sink/status | jq
+```
+
+And you should get the following response:
+
+```json
+{
+  "name": "jdbc-sink",
+  "connector": {
+    "state": "RUNNING",
+    "worker_id": "kafka-connect:8083"
+  },
+  "tasks": [
+    {
+      "id": 0,
+      "state": "RUNNING",
+      "worker_id": "kafka-connect:8083"
+    }
+  ],
+  "type": "sink"
+}
+```
+
+And check the kafka topics the connector streams data to:
+
+```bash
+$ curl http://localhost:8083/connectors/jdbc-sink/topics | jq
+```
+
+You might see the following:
+
+```json
+{
+  "jdbc-sink": {
+    "topics": [
+      "cpt_investments"
+    ]
+  }
+}
+```
+
+Deploy the JdbcSink connector
+
+```bash
+$ curl -XPOST -H"Content-type: application/json" -d'
+{
+  "name": "jdbc-sink",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "connection.password": "postgres",
+    "connection.user": "postgres",
+    "connection.url": "jdbc:postgresql://cpt-reporting-db:5432/crypto-profit-tracker-reporting",
+    "connection.ds.pool.size": "5",
+    "dialect.name": "PostgreSqlDatabaseDialect",
+    "tasks.max": "1",
+    "topics": "cpt_users,cpt_user_roles,cpt_investments,cpt_investment_records",
+    "insert.mode.databaselevel": "true",
+    "auto.evolve": "true",
+    "name": "jdbc-sink",
+    "auto.create": "true",
+    "transforms": "unwrap,addTopicSuffix",
+    "transforms.addTopicSuffix.replacement": "$1",
+    "transforms.addTopicSuffix.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.addTopicSuffix.regex": "(.*)",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "false",
+    "insert.mode": "upsert",
+    "delete.enabled": "true",
+    "pk.fields": "id",
+    "pk.mode": "record_key",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "time.precision.mode": "connect"
+  }
+}'\
+ http://localhost:8083/connectors/ | jq
+ 
+```
+
+### Check the destination database!
