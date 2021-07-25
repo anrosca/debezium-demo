@@ -1,0 +1,110 @@
+PUT http://localhost:8083/connectors/jdbc-source/config
+Content-type: application/json
+
+{
+  "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+  "timestamp.column.name": "updated_at",
+  "connection.password": "postgres",
+  "transforms.InsertTopic.type": "org.apache.kafka.connect.transforms.InsertField$Value",
+  "transforms": "addTopicSuffix,InsertTopic,InsertSourceDetails,copyFieldToKey,extractValuefromStruct,MaskField",
+  "transforms.MaskField.type": "org.apache.kafka.connect.transforms.MaskField$Value",
+  "transforms.MaskField.fields": "password",
+  "transforms.MaskField.replacement": "********",
+  "transforms.extractValuefromStruct.type": "org.apache.kafka.connect.transforms.ExtractField$Key",
+  "transforms.addTopicSuffix.replacement": "$1",
+  "transforms.addTopicSuffix.type": "org.apache.kafka.connect.transforms.RegexRouter",
+  "transforms.addTopicSuffix.regex": "(.*)",
+  "transforms.InsertTopic.topic.field": "messagetopic",
+  "table.whitelist": "investments,investment_records,users,user_roles,foo",
+  "mode": "timestamp",
+  "topic.prefix": "cpt-",
+  "transforms.copyFieldToKey.type": "org.apache.kafka.connect.transforms.ValueToKey",
+  "dialect.name": "PostgreSqlDatabaseDialect",
+  "poll.inverval.ms": "1000",
+  "transforms.copyFieldToKey.fields": "id",
+  "validate.non.null": "false",
+  "transforms.InsertSourceDetails.static.field": "messagesource",
+  "transforms.InsertSourceDetails.type": "org.apache.kafka.connect.transforms.InsertField$Value",
+  "connection.user": "postgres",
+  "name": "jdbc-source",
+  "numeric.mapping": "best_fit",
+  "transforms.extractValuefromStruct.field": "id",
+  "connection.url": "jdbc:postgresql://cpt-operational-db:5432/crypto-profit-tracker",
+  "transforms.InsertSourceDetails.static.value": "JDBC Source Connector cpt db",
+  "value.converter.schema.registry.url": "http://schema-registry:8081",
+  "key.converter.schema.registry.url": "http://schema-registry:8081",
+  "key.converter": "io.confluent.connect.avro.AvroConverter",
+  "value.converter": "io.confluent.connect.avro.AvroConverter"
+}
+
+###
+
+POST http://localhost:8083/connectors/
+Content-type: application/json
+Accept: application/json
+
+{
+  "name": "jdbc-sink",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "dialect.name": "PostgreSqlDatabaseDialect",
+    "connection.password": "postgres",
+    "tasks.max": "1",
+    "topics": "cpt_users,cpt_user_roles,cpt_investments,cpt_investment_records",
+    "insert.mode.databaselevel": "true",
+    "auto.evolve": "true",
+    "connection.user": "postgres",
+    "name": "jdbc-sink",
+    "auto.create": "true",
+    "transforms": "unwrap,addTopicSuffix",
+    "transforms.addTopicSuffix.replacement": "$1",
+    "transforms.addTopicSuffix.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.addTopicSuffix.regex": "(.*)",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "false",
+    "insert.mode": "upsert",
+    "delete.enabled": "true",
+    "pk.fields": "id",
+    "pk.mode": "record_key",
+    "connection.url": "jdbc:postgresql://cpt-reporting-db:5432/crypto-profit-tracker-reporting",
+    "connection.ds.pool.size": "5",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "time.precision.mode": "connect"
+  }
+}
+
+###
+
+POST http://localhost:8083/connectors/
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "cpt-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "cpt-operational-db",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "crypto-profit-tracker",
+    "database.server.name": "cpt",
+    "schema.whitelist": "public",
+    "plugin.name": "pgoutput",
+    "topic.prefix": "cpt-",
+    "dialect.name": "PostgreSqlDatabaseDialect",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "transforms": "Reroute",
+    "transforms.Reroute.type": "io.debezium.transforms.ByLogicalTableRouter",
+    "transforms.Reroute.topic.regex": "cpt\\.public\\.(.*)",
+    "transforms.Reroute.topic.replacement": "cpt_$1"
+  }
+}
+
+###
