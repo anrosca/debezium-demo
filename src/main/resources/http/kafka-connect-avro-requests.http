@@ -94,7 +94,7 @@ Accept: application/json
     "transforms.InsertTopic.topic.field": "messagetopic",
     "table.whitelist": "investments,investment_records,users,user_roles,foo",
     "mode": "timestamp",
-    "topic.prefix": "cpt-",
+    "topic.prefix": "cpt_",
     "transforms.copyFieldToKey.type": "org.apache.kafka.connect.transforms.ValueToKey",
     "dialect.name": "PostgreSqlDatabaseDialect",
     "poll.inverval.ms": "1000",
